@@ -3,1373 +3,1140 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Team Hub — Supervisor Portal</title>
+<title>Team Hub — Supervisor Portal v2</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=IBM+Plex+Mono:wght@400;500&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
-<!-- QR Code library -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<!-- jsPDF for export -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<!--
+=============================================================
+  FIREBASE SETUP INSTRUCTIONS (read carefully)
+  ---------------------------------------------------------------
+  1. Go to https://console.firebase.google.com
+  2. Click "Add project" -> name it (e.g. "teamhub") -> Continue
+  3. Disable Google Analytics (not needed) -> Create project
+  4. In left sidebar click "Firestore Database" -> Create database
+     -> Start in TEST MODE -> choose your region -> Enable
+  5. Click the gear icon top-left -> Project Settings
+  6. Under "Your apps" click the </> Web icon
+  7. Register app (any nickname) -> copy the firebaseConfig values
+  8. In the Admin tab (after login), paste each value into the
+     Firebase Setup form and click "Save & Connect"
+  9. Re-upload this file to GitHub after connecting once to
+     pre-fill the config for all users
+=============================================================
+-->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
 <style>
-/* ===================== CSS VARIABLES ===================== */
 :root {
-  --bg: #0d0f14;
-  --surface: #161a23;
-  --surface2: #1e2330;
-  --border: #2a3045;
-  --accent: #f5a623;
-  --accent2: #e84545;
-  --green: #2dce89;
-  --blue: #4a90e2;
-  --text: #e8ecf4;
-  --muted: #7a8299;
-  --warn: #ff6b35;
-  --font-head: 'Barlow Condensed', sans-serif;
-  --font-body: 'Barlow', sans-serif;
-  --font-mono: 'IBM Plex Mono', monospace;
-  --radius: 8px;
-  --shadow: 0 4px 24px rgba(0,0,0,0.4);
+  --bg:#0d0f14; --surface:#161a23; --surface2:#1e2330; --border:#2a3045;
+  --accent:#f5a623; --accent2:#e84545; --green:#2dce89; --blue:#4a90e2;
+  --purple:#9b59b6; --text:#e8ecf4; --muted:#7a8299; --warn:#ff6b35;
+  --font-head:'Barlow Condensed',sans-serif; --font-body:'Barlow',sans-serif;
+  --font-mono:'IBM Plex Mono',monospace; --radius:8px; --shadow:0 4px 24px rgba(0,0,0,.4);
 }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:15px;min-height:100vh;line-height:1.6}
 
-/* ===================== RESET & BASE ===================== */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; }
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-body);
-  font-size: 15px;
-  min-height: 100vh;
-  line-height: 1.6;
-}
+header{background:var(--surface);border-bottom:2px solid var(--accent);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:64px;position:sticky;top:0;z-index:100;box-shadow:0 2px 20px rgba(0,0,0,.5)}
+.logo{font-family:var(--font-head);font-size:28px;font-weight:900;letter-spacing:2px;color:var(--accent);text-transform:uppercase}
+.logo span{color:var(--text)}
+.header-right{display:flex;align-items:center;gap:16px}
+.header-meta{font-family:var(--font-mono);font-size:11px;color:var(--muted);text-align:right}
+.db-status{font-family:var(--font-mono);font-size:10px;padding:3px 10px;border-radius:20px;background:rgba(232,69,69,.2);color:var(--accent2);border:1px solid var(--accent2);transition:all .3s}
+.db-status.connected{background:rgba(45,206,137,.2);color:var(--green);border-color:var(--green)}
 
-/* ===================== HEADER ===================== */
-header {
-  background: var(--surface);
-  border-bottom: 2px solid var(--accent);
-  padding: 0 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 64px;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  box-shadow: 0 2px 20px rgba(0,0,0,0.5);
-}
-.logo {
-  font-family: var(--font-head);
-  font-size: 28px;
-  font-weight: 900;
-  letter-spacing: 2px;
-  color: var(--accent);
-  text-transform: uppercase;
-}
-.logo span { color: var(--text); }
-.header-meta {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--muted);
-  text-align: right;
-}
+#notify-bar{display:none;background:linear-gradient(90deg,var(--warn),#ff9f43);color:#fff;padding:10px 24px;font-family:var(--font-mono);font-size:13px;font-weight:500;text-align:center;animation:pulse-bar 2s infinite;z-index:99}
+@keyframes pulse-bar{0%,100%{opacity:1}50%{opacity:.85}}
+#notify-bar.show{display:block}
 
-/* ===================== NOTIFICATION BANNER ===================== */
-#notify-bar {
-  display: none;
-  background: linear-gradient(90deg, var(--warn), #ff9f43);
-  color: #fff;
-  padding: 10px 24px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 500;
-  text-align: center;
-  animation: pulse-bar 2s infinite;
-  position: relative;
-  z-index: 99;
-}
-@keyframes pulse-bar {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.85; }
-}
-#notify-bar.show { display: block; }
+.tab-bar{background:var(--surface);border-bottom:1px solid var(--border);display:flex;overflow-x:auto;padding:0 16px;gap:4px;scrollbar-width:none}
+.tab-bar::-webkit-scrollbar{display:none}
+.tab-btn{background:none;border:none;color:var(--muted);font-family:var(--font-head);font-size:16px;font-weight:600;letter-spacing:1px;text-transform:uppercase;padding:16px 18px 14px;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;transition:color .2s,border-color .2s}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-btn.locked::after{content:' 🔒';font-size:10px}
 
-/* ===================== TABS ===================== */
-.tab-bar {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  overflow-x: auto;
-  padding: 0 16px;
-  gap: 4px;
-  scrollbar-width: none;
-}
-.tab-bar::-webkit-scrollbar { display: none; }
-.tab-btn {
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-family: var(--font-head);
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  padding: 16px 20px 14px;
-  cursor: pointer;
-  border-bottom: 3px solid transparent;
-  white-space: nowrap;
-  transition: color 0.2s, border-color 0.2s;
-}
-.tab-btn:hover { color: var(--text); }
-.tab-btn.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-}
+.content{max-width:980px;margin:0 auto;padding:32px 20px}
+.tab-panel{display:none}
+.tab-panel.active{display:block;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
-/* ===================== CONTENT AREA ===================== */
-.content { max-width: 960px; margin: 0 auto; padding: 32px 20px; }
-.tab-panel { display: none; }
-.tab-panel.active { display: block; animation: fadeIn 0.3s ease; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;margin-bottom:24px;box-shadow:var(--shadow)}
+.card-title{font-family:var(--font-head);font-size:22px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:20px;display:flex;align-items:center;gap:10px}
 
-/* ===================== CARDS ===================== */
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 28px;
-  margin-bottom: 24px;
-  box-shadow: var(--shadow);
-}
-.card-title {
-  font-family: var(--font-head);
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 20px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.card-title .icon { font-size: 20px; }
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:600px){.form-row{grid-template-columns:1fr}}
+.form-group{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+label{font-family:var(--font-mono);font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+input,select,textarea{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--font-body);font-size:14px;padding:10px 14px;outline:none;transition:border-color .2s;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(245,166,35,.12)}
+select option{background:var(--surface2)}
+textarea{resize:vertical;min-height:90px}
 
-/* ===================== FORMS ===================== */
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-@media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
-.form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
-label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-input, select, textarea {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  font-family: var(--font-body);
-  font-size: 14px;
-  padding: 10px 14px;
-  outline: none;
-  transition: border-color 0.2s;
-  width: 100%;
-}
-input:focus, select:focus, textarea:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(245,166,35,0.12);
-}
-select option { background: var(--surface2); }
-textarea { resize: vertical; min-height: 90px; }
+.btn{display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:#000;border:none;border-radius:6px;font-family:var(--font-head);font-size:16px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:11px 24px;cursor:pointer;transition:background .2s,transform .1s}
+.btn:hover{background:#e09820}
+.btn:active{transform:scale(.97)}
+.btn.secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn.secondary:hover{border-color:var(--accent);color:var(--accent)}
+.btn.danger{background:var(--accent2);color:#fff}
+.btn.danger:hover{background:#c93535}
+.btn.green{background:var(--green);color:#000}
+.btn.green:hover{background:#25b578}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap}
 
-/* ===================== BUTTONS ===================== */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--accent);
-  color: #000;
-  border: none;
-  border-radius: 6px;
-  font-family: var(--font-head);
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  padding: 11px 24px;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
-}
-.btn:hover { background: #e09820; }
-.btn:active { transform: scale(0.97); }
-.btn.secondary {
-  background: var(--surface2);
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-.btn.secondary:hover { border-color: var(--accent); color: var(--accent); background: var(--surface2); }
-.btn.danger { background: var(--accent2); color: #fff; }
-.btn.danger:hover { background: #c93535; }
-.btn.green { background: var(--green); color: #000; }
-.btn.green:hover { background: #25b578; }
+.issue-entry{background:var(--surface2);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:6px;padding:16px 18px;margin-bottom:12px;position:relative;animation:slideIn .3s ease}
+@keyframes slideIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+.issue-entry.rt11{border-left-color:#4a90e2}
+.issue-entry.rt12{border-left-color:#f5a623}
+.issue-entry.rt13{border-left-color:#2dce89}
+.issue-entry.rt27{border-left-color:#e84545}
+.issue-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;flex-wrap:wrap;gap:8px}
+.issue-time{font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+.issue-text{font-size:14px;color:var(--text);margin-bottom:8px}
+.issue-photo{width:80px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;transition:transform .2s}
+.issue-photo:hover{transform:scale(1.05)}
+.del-btn{position:absolute;top:12px;right:12px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;transition:color .2s}
+.del-btn:hover{color:var(--accent2)}
 
-/* ===================== ISSUE LOG ENTRIES ===================== */
-.issue-list { margin-top: 24px; }
-.issue-entry {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--accent);
-  border-radius: 6px;
-  padding: 16px 18px;
-  margin-bottom: 12px;
-  position: relative;
-  animation: slideIn 0.3s ease;
-}
-@keyframes slideIn { from { opacity:0; transform:translateX(-10px); } to { opacity:1; transform:translateX(0); } }
-.issue-entry.rt11 { border-left-color: #4a90e2; }
-.issue-entry.rt12 { border-left-color: #f5a623; }
-.issue-entry.rt13 { border-left-color: #2dce89; }
-.issue-entry.rt27 { border-left-color: #e84545; }
-.issue-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.issue-route {
-  font-family: var(--font-head);
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 1px;
-}
-.issue-time {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--muted);
-}
-.issue-text { font-size: 14px; color: var(--text); margin-bottom: 8px; }
-.issue-photo {
-  width: 80px;
-  height: 60px;
-  object-fit: cover;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-  cursor: pointer;
-  transition: transform 0.2s;
-}
-.issue-photo:hover { transform: scale(1.05); }
-.del-btn {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: none;
-  border: none;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 16px;
-  transition: color 0.2s;
-}
-.del-btn:hover { color: var(--accent2); }
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-family:var(--font-mono);font-size:11px;font-weight:500}
+.badge-rt11{background:rgba(74,144,226,.2);color:#4a90e2}
+.badge-rt12{background:rgba(245,166,35,.2);color:#f5a623}
+.badge-rt13{background:rgba(45,206,137,.2);color:#2dce89}
+.badge-rt27{background:rgba(232,69,69,.2);color:#e84545}
 
-/* ===================== BADGE ===================== */
-.badge {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: 20px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-}
-.badge-rt11 { background: rgba(74,144,226,0.2); color: #4a90e2; }
-.badge-rt12 { background: rgba(245,166,35,0.2); color: #f5a623; }
-.badge-rt13 { background: rgba(45,206,137,0.2); color: #2dce89; }
-.badge-rt27 { background: rgba(232,69,69,0.2); color: #e84545; }
+.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+@media(max-width:600px){.stats-bar{grid-template-columns:1fr 1fr}}
+.stat-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px;text-align:center}
+.stat-val{font-family:var(--font-head);font-size:36px;font-weight:900;color:var(--accent);line-height:1}
+.stat-label{font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;margin-top:4px}
 
-/* ===================== CALENDAR ===================== */
-.cal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-.cal-nav { display: flex; gap: 8px; }
-.cal-month-label {
-  font-family: var(--font-head);
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-}
-.cal-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
-}
-.cal-day-label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--muted);
-  text-align: center;
-  padding: 4px 0;
-  text-transform: uppercase;
-}
-.cal-day {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  min-height: 70px;
-  padding: 6px;
-  cursor: pointer;
-  transition: border-color 0.2s;
-  font-size: 13px;
-  position: relative;
-}
-.cal-day:hover { border-color: var(--accent); }
-.cal-day.today { border-color: var(--accent); background: rgba(245,166,35,0.06); }
-.cal-day.other-month { opacity: 0.3; cursor: default; }
-.cal-day-num {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-  margin-bottom: 4px;
-}
-.cal-day.today .cal-day-num { color: var(--accent); font-weight: 700; }
-.cal-event {
-  background: var(--accent);
-  color: #000;
-  font-size: 10px;
-  font-weight: 600;
-  border-radius: 3px;
-  padding: 1px 4px;
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cal-event.blue { background: var(--blue); color: #fff; }
-.cal-event.green { background: var(--green); color: #000; }
-.cal-event.red { background: var(--accent2); color: #fff; }
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+.cal-month-label{font-family:var(--font-head);font-size:26px;font-weight:700;letter-spacing:2px;text-transform:uppercase}
+.cal-nav{display:flex;gap:8px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cal-day-label{font-family:var(--font-mono);font-size:11px;color:var(--muted);text-align:center;padding:4px 0;text-transform:uppercase}
+.cal-day{background:var(--surface2);border:1px solid var(--border);border-radius:6px;min-height:70px;padding:6px;cursor:pointer;transition:border-color .2s}
+.cal-day:hover{border-color:var(--accent)}
+.cal-day.today{border-color:var(--accent);background:rgba(245,166,35,.06)}
+.cal-day.other-month{opacity:.3;cursor:default}
+.cal-day-num{font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--muted);margin-bottom:4px}
+.cal-day.today .cal-day-num{color:var(--accent);font-weight:700}
+.cal-event{background:var(--accent);color:#000;font-size:10px;font-weight:600;border-radius:3px;padding:1px 4px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-event.blue{background:var(--blue);color:#fff}
+.cal-event.green{background:var(--green);color:#000}
+.cal-event.red{background:var(--accent2);color:#fff}
 
-/* ===================== MODAL ===================== */
-.modal-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.7);
-  z-index: 200;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(4px);
-}
-.modal-overlay.open { display: flex; }
-.modal {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 32px;
-  width: 90%;
-  max-width: 480px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
-  animation: modalIn 0.25s ease;
-}
-@keyframes modalIn { from { opacity:0; transform:scale(0.95); } to { opacity:1; transform:scale(1); } }
-.modal-title {
-  font-family: var(--font-head);
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 20px;
-}
-.modal-footer { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
+@media(max-width:700px){.chart-grid{grid-template-columns:1fr}}
+.chart-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:20px}
+.chart-card h3{font-family:var(--font-head);font-size:16px;font-weight:700;color:var(--accent);letter-spacing:1px;text-transform:uppercase;margin-bottom:16px}
+.chart-wrap{position:relative;height:220px}
 
-/* ===================== PHOTO LIGHTBOX ===================== */
-#lightbox {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.92);
-  z-index: 300;
-  align-items: center;
-  justify-content: center;
-}
-#lightbox.open { display: flex; }
-#lightbox img { max-width: 90vw; max-height: 90vh; border-radius: 8px; }
-#lightbox-close {
-  position: absolute;
-  top: 20px; right: 24px;
-  background: none; border: none; color: #fff;
-  font-size: 32px; cursor: pointer;
-}
+.history-entry{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+.history-entry:last-child{border-bottom:none}
+.history-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;margin-top:6px}
+.history-dot.del{background:var(--accent2)}
+.history-dot.add{background:var(--green)}
+.history-dot.edit{background:var(--blue)}
+.history-text{font-size:13px;color:var(--text)}
+.history-meta{font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-top:2px}
 
-/* ===================== GRIEVANCE BOX ===================== */
-.anon-note {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--blue);
-  border-radius: 6px;
-  padding: 14px 16px;
-  margin-bottom: 10px;
-  font-size: 14px;
-  animation: slideIn 0.3s ease;
-}
-.anon-note-meta {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--muted);
-  margin-top: 6px;
-}
+.upload-zone{border:2px dashed var(--border);border-radius:8px;padding:20px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;font-family:var(--font-mono);font-size:12px;color:var(--muted)}
+.upload-zone:hover{border-color:var(--accent);background:rgba(245,166,35,.04)}
+.upload-zone input{display:none}
+#photo-preview{max-width:120px;max-height:90px;border-radius:6px;margin-top:8px;display:none}
 
-/* ===================== QR CODE ===================== */
-#qrcode {
-  background: #fff;
-  display: inline-block;
-  padding: 12px;
-  border-radius: 8px;
-  margin-top: 12px;
-}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:32px;width:90%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6);animation:modalIn .25s ease}
+@keyframes modalIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+.modal-title{font-family:var(--font-head);font-size:22px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:20px}
+.modal-footer{display:flex;gap:10px;margin-top:20px;justify-content:flex-end}
 
-/* ===================== STATS BAR ===================== */
-.stats-bar {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  margin-bottom: 24px;
-}
-@media (max-width: 600px) { .stats-bar { grid-template-columns: 1fr 1fr; } }
-.stat-card {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
-  text-align: center;
-}
-.stat-val {
-  font-family: var(--font-head);
-  font-size: 36px;
-  font-weight: 900;
-  color: var(--accent);
-  line-height: 1;
-}
-.stat-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--muted);
-  text-transform: uppercase;
-  margin-top: 4px;
-}
+#pin-screen{display:none;position:fixed;inset:0;background:rgba(13,15,20,.97);z-index:500;align-items:center;justify-content:center}
+#pin-screen.open{display:flex}
+.pin-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:40px 48px;text-align:center;max-width:360px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.7)}
+.pin-title{font-family:var(--font-head);font-size:28px;font-weight:900;color:var(--accent);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px}
+.pin-sub{font-family:var(--font-mono);font-size:12px;color:var(--muted);margin-bottom:24px}
+.pin-input{text-align:center;font-size:20px;letter-spacing:8px;font-family:var(--font-mono)}
+.pin-error{color:var(--accent2);font-family:var(--font-mono);font-size:12px;margin-top:10px;min-height:18px}
 
-/* ===================== FILE UPLOAD ===================== */
-.upload-zone {
-  border: 2px dashed var(--border);
-  border-radius: 8px;
-  padding: 20px;
-  text-align: center;
-  cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--muted);
-}
-.upload-zone:hover { border-color: var(--accent); background: rgba(245,166,35,0.04); }
-.upload-zone input { display: none; }
-#photo-preview { max-width: 120px; max-height: 90px; border-radius: 6px; margin-top: 8px; display: none; }
+.anon-note{background:var(--surface2);border:1px solid var(--border);border-left:4px solid var(--blue);border-radius:6px;padding:14px 16px;margin-bottom:10px;animation:slideIn .3s ease}
+.anon-note-meta{font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-top:6px}
 
-/* ===================== EMPTY STATE ===================== */
-.empty {
-  text-align: center;
-  padding: 40px 20px;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 13px;
-}
-.empty .icon { font-size: 40px; margin-bottom: 10px; }
-
-/* ===================== DIVIDER ===================== */
-hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
-
-/* ===================== TOAST ===================== */
-#toast {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  background: var(--green);
-  color: #000;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 500;
-  padding: 12px 20px;
-  border-radius: 8px;
-  transform: translateY(80px);
-  opacity: 0;
-  transition: all 0.3s ease;
-  z-index: 999;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-}
-#toast.show { transform: translateY(0); opacity: 1; }
-
-/* ===================== SCROLLBAR ===================== */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.empty{text-align:center;padding:40px 20px;color:var(--muted);font-family:var(--font-mono);font-size:13px}
+.empty .icon{font-size:40px;margin-bottom:10px}
+hr{border:none;border-top:1px solid var(--border);margin:24px 0}
+#qrcode{background:#fff;display:inline-block;padding:12px;border-radius:8px;margin-top:12px}
+#toast{position:fixed;bottom:24px;right:24px;background:var(--green);color:#000;font-family:var(--font-mono);font-size:13px;font-weight:500;padding:12px 20px;border-radius:8px;transform:translateY(80px);opacity:0;transition:all .3s ease;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+#toast.show{transform:translateY(0);opacity:1}
+#lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:300;align-items:center;justify-content:center}
+#lightbox.open{display:flex}
+#lightbox img{max-width:90vw;max-height:90vh;border-radius:8px}
+#lightbox-close{position:absolute;top:20px;right:24px;background:none;border:none;color:#fff;font-size:32px;cursor:pointer}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.firebase-notice{background:rgba(245,166,35,.08);border:1px dashed var(--accent);border-radius:8px;padding:16px 20px;font-family:var(--font-mono);font-size:12px;color:var(--accent);margin-bottom:20px;line-height:1.8}
+table{width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:12px}
+th{text-align:left;padding:8px 10px;border-bottom:2px solid var(--border);color:var(--muted)}
+td{padding:8px 10px;border-bottom:1px solid var(--border)}
 </style>
 </head>
 <body>
 
-<!-- NOTIFICATION BAR -->
-<div id="notify-bar">
-  ⚠️ <span id="notify-msg"></span>
-</div>
+<div id="notify-bar">⚠️ <span id="notify-msg"></span></div>
 
-<!-- HEADER -->
 <header>
   <div class="logo">Team<span>Hub</span></div>
-  <div class="header-meta">
-    <div id="current-date"></div>
-    <div id="current-time"></div>
+  <div class="header-right">
+    <span class="db-status" id="db-status">⬤ LOCAL</span>
+    <div class="header-meta">
+      <div id="current-date"></div>
+      <div id="current-time"></div>
+    </div>
   </div>
 </header>
 
-<!-- TAB BAR -->
 <div class="tab-bar">
-  <button class="tab-btn active" onclick="switchTab('issues')">🚛 Driver Issues</button>
-  <button class="tab-btn" onclick="switchTab('calendar')">📅 Calendar</button>
-  <button class="tab-btn" onclick="switchTab('grievance')">🔒 Anonymous Notes</button>
-  <button class="tab-btn" onclick="switchTab('admin')">⚙️ Admin / Export</button>
-  <button class="tab-btn" onclick="switchTab('qr')">📱 QR / Share</button>
+  <button class="tab-btn active"  onclick="switchTab('issues',this)">🚛 Driver Issues</button>
+  <button class="tab-btn"         onclick="switchTab('calendar',this)">📅 Calendar</button>
+  <button class="tab-btn"         onclick="switchTab('reports',this)">📊 Reports</button>
+  <button class="tab-btn locked"  onclick="switchTab('admin',this)" id="admin-tab-btn">⚙️ Admin</button>
+  <button class="tab-btn"         onclick="switchTab('grievance',this)">🔒 Anon Notes</button>
+  <button class="tab-btn"         onclick="switchTab('history',this)">🕓 History</button>
+  <button class="tab-btn"         onclick="switchTab('qr',this)">📱 QR / Share</button>
 </div>
 
-<!-- ===================== TAB: DRIVER ISSUES ===================== -->
-<div class="tab-panel active" id="tab-issues">
-  <div class="content">
-
-    <!-- Stats -->
-    <div class="stats-bar">
-      <div class="stat-card">
-        <div class="stat-val" id="stat-total">0</div>
-        <div class="stat-label">Total Issues</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-val" id="stat-rt11" style="color:#4a90e2">0</div>
-        <div class="stat-label">RT11</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-val" id="stat-rt12" style="color:#f5a623">0</div>
-        <div class="stat-label">RT12</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-val" id="stat-rt13rt27" style="color:#2dce89">0</div>
-        <div class="stat-label">RT13 + RT27</div>
-      </div>
-    </div>
-
-    <!-- Log Form -->
-    <div class="card">
-      <div class="card-title"><span class="icon">📋</span> Log a Driver Issue</div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Drive Team / Route</label>
-          <select id="route-select">
-            <option value="">-- Select Route --</option>
-            <option value="RT11">RT11</option>
-            <option value="RT12">RT12</option>
-            <option value="RT13">RT13</option>
-            <option value="RT27">RT27</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Incident Time</label>
-          <input type="datetime-local" id="issue-time">
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Issue Description</label>
-        <textarea id="issue-desc" placeholder="Describe the issue in detail..."></textarea>
-      </div>
-      <div class="form-group">
-        <label>Photo Documentation (optional)</label>
-        <div class="upload-zone" onclick="document.getElementById('photo-input').click()">
-          <div>📷 Click to upload photo</div>
-          <input type="file" id="photo-input" accept="image/*" onchange="handlePhotoUpload(event)">
-          <img id="photo-preview" alt="Preview">
-        </div>
-      </div>
-      <button class="btn" onclick="submitIssue()">➕ Log Issue</button>
-    </div>
-
-    <!-- Issue List -->
-    <div class="card">
-      <div class="card-title"><span class="icon">📁</span> Issue Log</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
-        <select id="filter-route" onchange="renderIssues()" style="width:auto;min-width:140px;">
-          <option value="">All Routes</option>
-          <option value="RT11">RT11</option>
-          <option value="RT12">RT12</option>
-          <option value="RT13">RT13</option>
-          <option value="RT27">RT27</option>
+<!-- TAB: ISSUES -->
+<div class="tab-panel active" id="tab-issues"><div class="content">
+  <div class="stats-bar">
+    <div class="stat-card"><div class="stat-val" id="stat-total">0</div><div class="stat-label">Total Issues</div></div>
+    <div class="stat-card"><div class="stat-val" id="stat-rt11" style="color:#4a90e2">0</div><div class="stat-label">RT11</div></div>
+    <div class="stat-card"><div class="stat-val" id="stat-rt12" style="color:#f5a623">0</div><div class="stat-label">RT12</div></div>
+    <div class="stat-card"><div class="stat-val" id="stat-rt1327" style="color:#2dce89">0</div><div class="stat-label">RT13 + RT27</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">📋 Log a Driver Issue</div>
+    <div class="form-row">
+      <div class="form-group"><label>Drive Team / Route</label>
+        <select id="route-select">
+          <option value="">-- Select Route --</option>
+          <option>RT11</option><option>RT12</option><option>RT13</option><option>RT27</option>
         </select>
-        <input type="text" id="filter-search" placeholder="Search issues..." oninput="renderIssues()" style="flex:1;min-width:150px;">
       </div>
-      <div id="issue-list"></div>
+      <div class="form-group"><label>Incident Time</label><input type="datetime-local" id="issue-time"></div>
     </div>
+    <div class="form-group"><label>Issue Description</label><textarea id="issue-desc" placeholder="Describe the issue in detail..."></textarea></div>
+    <div class="form-group">
+      <label>Photo (optional)</label>
+      <div class="upload-zone" onclick="document.getElementById('photo-input').click()">
+        <div>📷 Click to upload photo</div>
+        <input type="file" id="photo-input" accept="image/*" onchange="handlePhotoUpload(event)">
+        <img id="photo-preview" alt="Preview">
+      </div>
+    </div>
+    <button class="btn" onclick="submitIssue()">➕ Log Issue</button>
+  </div>
+  <div class="card">
+    <div class="card-title">📁 Issue Log</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+      <select id="filter-route" onchange="renderIssues()" style="width:auto;min-width:130px;">
+        <option value="">All Routes</option>
+        <option>RT11</option><option>RT12</option><option>RT13</option><option>RT27</option>
+      </select>
+      <input type="date" id="filter-date-from" onchange="renderIssues()" style="width:auto;" title="From">
+      <input type="date" id="filter-date-to"   onchange="renderIssues()" style="width:auto;" title="To">
+      <input type="text" id="filter-search" placeholder="Search keyword..." oninput="renderIssues()" style="flex:1;min-width:140px;">
+    </div>
+    <div id="issue-list"></div>
+  </div>
+</div></div>
 
+<!-- TAB: CALENDAR -->
+<div class="tab-panel" id="tab-calendar"><div class="content">
+  <div class="card">
+    <div class="cal-header">
+      <div class="cal-month-label" id="cal-month-label"></div>
+      <div class="cal-nav">
+        <button class="btn secondary" onclick="changeMonth(-1)">◀ Prev</button>
+        <button class="btn secondary" onclick="changeMonth(1)">Next ▶</button>
+      </div>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">➕ Add Event</div>
+    <div class="form-row">
+      <div class="form-group"><label>Event Title</label><input type="text" id="event-title" placeholder="e.g. Safety Meeting"></div>
+      <div class="form-group"><label>Date</label><input type="date" id="event-date"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Color</label>
+        <select id="event-color"><option value="">Orange</option><option value="blue">Blue</option><option value="green">Green</option><option value="red">Red</option></select>
+      </div>
+      <div class="form-group"><label>Note (optional)</label><input type="text" id="event-note" placeholder="Additional detail..."></div>
+    </div>
+    <button class="btn" onclick="addEvent()">📅 Add Event</button>
+  </div>
+  <div class="card"><div class="card-title">🗓️ Upcoming Events</div><div id="event-list"></div></div>
+</div></div>
+
+<!-- TAB: REPORTS -->
+<div class="tab-panel" id="tab-reports"><div class="content">
+  <div class="card">
+    <div class="card-title">📊 Reporting Dashboard</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:24px;">
+      <div class="form-group" style="margin:0"><label>From</label><input type="date" id="rpt-from" onchange="renderReports()" style="width:auto"></div>
+      <div class="form-group" style="margin:0"><label>To</label><input type="date" id="rpt-to" onchange="renderReports()" style="width:auto"></div>
+      <button class="btn secondary" onclick="resetRptDates()">Show All</button>
+    </div>
+    <div class="stats-bar" id="rpt-stats"></div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>Issues by Route</h3><div class="chart-wrap"><canvas id="chart-route"></canvas></div></div>
+      <div class="chart-card"><h3>Weekly Trend</h3><div class="chart-wrap"><canvas id="chart-trend"></canvas></div></div>
+      <div class="chart-card"><h3>This Week Daily</h3><div class="chart-wrap"><canvas id="chart-daily"></canvas></div></div>
+      <div class="chart-card"><h3>Top Keywords</h3><div class="chart-wrap"><canvas id="chart-keywords"></canvas></div></div>
+    </div>
+    <div class="card-title" style="margin-top:8px">📋 Filtered Table</div>
+    <div id="rpt-table"></div>
+  </div>
+</div></div>
+
+<!-- TAB: ADMIN -->
+<div class="tab-panel" id="tab-admin"><div class="content">
+  <div class="card">
+    <div class="card-title">🔥 Firebase Live Data</div>
+    <div class="firebase-notice" id="fb-notice">⚙️ <strong>Firebase Not Configured</strong> — data is local only. Fill in config below to enable shared live data for all devices.</div>
+    <div class="form-row">
+      <div class="form-group"><label>API Key</label><input type="text" id="fb-apiKey" placeholder="AIza..."></div>
+      <div class="form-group"><label>Auth Domain</label><input type="text" id="fb-authDomain" placeholder="project.firebaseapp.com"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Project ID</label><input type="text" id="fb-projectId" placeholder="my-teamhub"></div>
+      <div class="form-group"><label>App ID</label><input type="text" id="fb-appId" placeholder="1:xxx:web:xxx"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="saveFirebaseConfig()">💾 Save & Connect</button>
+      <button class="btn secondary" onclick="disconnectFirebase()">Disconnect</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">🔑 Admin PIN</div>
+    <p style="font-family:var(--font-mono);font-size:12px;color:var(--muted);margin-bottom:16px">Default PIN is <strong style="color:var(--accent)">1234</strong> — change it now.</p>
+    <div class="form-row">
+      <div class="form-group"><label>New PIN (4–8 digits)</label><input type="password" id="new-pin" placeholder="••••" maxlength="8"></div>
+      <div class="form-group"><label>Confirm PIN</label><input type="password" id="confirm-pin" placeholder="••••" maxlength="8"></div>
+    </div>
+    <button class="btn" onclick="changePin()">🔑 Update PIN</button>
+  </div>
+  <div class="card">
+    <div class="card-title">📤 Export Data</div>
+    <div class="btn-row">
+      <button class="btn green"     onclick="exportCSV()">📊 Issues CSV</button>
+      <button class="btn secondary" onclick="exportCalCSV()">📅 Calendar CSV</button>
+      <button class="btn secondary" onclick="exportGrvCSV()">🔒 Notes CSV</button>
+      <button class="btn secondary" onclick="exportHistCSV()">🕓 History CSV</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">🔄 Data Reset</div>
+    <div id="reset-status" style="font-family:var(--font-mono);font-size:13px;color:var(--green);margin-bottom:16px"></div>
+    <p style="font-family:var(--font-mono);font-size:12px;color:var(--muted);margin-bottom:14px">Auto-resets 2 days after month end. 72-hr warning fires automatically. Never resets on the 1st.</p>
+    <button class="btn danger" onclick="confirmReset()">🗑️ Manual Reset All Data</button>
+  </div>
+  <div class="card"><div class="card-title">📊 Live Summary</div><div id="admin-summary"></div></div>
+</div></div>
+
+<!-- TAB: GRIEVANCE -->
+<div class="tab-panel" id="tab-grievance"><div class="content">
+  <div class="card">
+    <div class="card-title">🔒 Anonymous Note Box</div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:20px;font-family:var(--font-mono)">Your identity is never stored. Date-stamped only.</p>
+    <div class="form-group"><label>Your Message</label><textarea id="grievance-text" placeholder="Write your anonymous note..." style="min-height:120px"></textarea></div>
+    <button class="btn" onclick="submitGrievance()">📨 Submit Anonymously</button>
+  </div>
+  <div class="card"><div class="card-title">📬 Supervisor View</div><div id="grievance-list"></div></div>
+</div></div>
+
+<!-- TAB: HISTORY -->
+<div class="tab-panel" id="tab-history"><div class="content">
+  <div class="card">
+    <div class="card-title">🕓 Change History & Audit Log</div>
+    <p style="font-family:var(--font-mono);font-size:12px;color:var(--muted);margin-bottom:20px">Every create, edit, and delete action recorded with timestamp.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+      <select id="hist-filter" onchange="renderHistory()" style="width:auto;min-width:160px">
+        <option value="">All Actions</option>
+        <option value="add">Added</option>
+        <option value="del">Deleted</option>
+        <option value="edit">Edited / System</option>
+      </select>
+      <input type="text" id="hist-search" placeholder="Search history..." oninput="renderHistory()" style="flex:1;min-width:150px">
+    </div>
+    <div id="history-list"></div>
+  </div>
+</div></div>
+
+<!-- TAB: QR -->
+<div class="tab-panel" id="tab-qr"><div class="content">
+  <div class="card">
+    <div class="card-title">📱 QR Code — Share Portal</div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:16px;font-family:var(--font-mono)">Workers scan this to open Team Hub instantly.</p>
+    <div id="qrcode"></div>
+    <div style="margin-top:16px"><label>Page URL</label><input type="text" id="page-url" readonly onclick="this.select()" style="margin-top:6px;font-family:var(--font-mono);font-size:12px;cursor:pointer"></div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn secondary" onclick="copyURL()">📋 Copy Link</button>
+      <button class="btn secondary" onclick="setupQR()">🔄 Regenerate</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">🚀 GitHub Deployment</div>
+    <div style="font-family:var(--font-mono);font-size:13px;color:var(--muted);line-height:2.2">
+      <p>1. Go to <strong style="color:var(--text)">github.com</strong> → sign in → click <strong style="color:var(--accent)">+</strong> → New repository</p>
+      <p>2. Name it (e.g. <strong style="color:var(--accent)">team-hub</strong>) → set <strong style="color:var(--text)">Public</strong> → Create repository</p>
+      <p>3. Click <strong style="color:var(--text)">"uploading an existing file"</strong> → drag your <strong style="color:var(--accent)">index.html</strong> in</p>
+      <p>4. Type commit message → click <strong style="color:var(--text)">Commit changes</strong></p>
+      <p>5. Go to <strong style="color:var(--text)">Settings → Pages</strong> → Source: <strong style="color:var(--accent)">main / root</strong> → Save</p>
+      <p>6. Wait 1–2 min → your URL: <strong style="color:var(--accent)">https://USERNAME.github.io/REPONAME</strong></p>
+      <p>7. Paste that URL above → Regenerate QR</p>
+    </div>
+  </div>
+</div></div>
+
+<!-- PIN SCREEN -->
+<div id="pin-screen">
+  <div class="pin-box">
+    <div class="pin-title">🔒 Admin Access</div>
+    <div class="pin-sub">Enter supervisor PIN to continue</div>
+    <div class="form-group"><input type="password" class="pin-input" id="pin-input" maxlength="8" placeholder="••••" onkeydown="if(event.key==='Enter')verifyPin()"></div>
+    <button class="btn" style="width:100%" onclick="verifyPin()">Unlock</button>
+    <div class="pin-error" id="pin-error"></div>
+    <button class="btn secondary" style="width:100%;margin-top:10px" onclick="closePinScreen()">Cancel</button>
   </div>
 </div>
 
-<!-- ===================== TAB: CALENDAR ===================== -->
-<div class="tab-panel" id="tab-calendar">
-  <div class="content">
-    <div class="card">
-      <div class="cal-header">
-        <div class="cal-month-label" id="cal-month-label">Month Year</div>
-        <div class="cal-nav">
-          <button class="btn secondary" onclick="changeMonth(-1)">◀ Prev</button>
-          <button class="btn secondary" onclick="changeMonth(1)">Next ▶</button>
-        </div>
-      </div>
-      <div class="cal-grid" id="cal-grid"></div>
-    </div>
-
-    <!-- Add Event -->
-    <div class="card">
-      <div class="card-title"><span class="icon">➕</span> Add Calendar Event</div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Event Title</label>
-          <input type="text" id="event-title" placeholder="e.g. Safety Meeting, Route Change">
-        </div>
-        <div class="form-group">
-          <label>Date</label>
-          <input type="date" id="event-date">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Color Tag</label>
-          <select id="event-color">
-            <option value="">Orange (Default)</option>
-            <option value="blue">Blue</option>
-            <option value="green">Green</option>
-            <option value="red">Red</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Note (optional)</label>
-          <input type="text" id="event-note" placeholder="Additional detail...">
-        </div>
-      </div>
-      <button class="btn" onclick="addEvent()">📅 Add Event</button>
-    </div>
-
-    <!-- Event List -->
-    <div class="card">
-      <div class="card-title"><span class="icon">🗓️</span> Upcoming Events</div>
-      <div id="event-list"></div>
-    </div>
-  </div>
-</div>
-
-<!-- ===================== TAB: GRIEVANCE ===================== -->
-<div class="tab-panel" id="tab-grievance">
-  <div class="content">
-    <div class="card">
-      <div class="card-title"><span class="icon">🔒</span> Anonymous Note Box</div>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:20px;font-family:var(--font-mono);">
-        Your identity is never stored. Notes are date-stamped only. Management cannot trace submissions.
-      </p>
-      <div class="form-group">
-        <label>Your Message / Concern</label>
-        <textarea id="grievance-text" placeholder="Write your anonymous note here..." style="min-height:120px;"></textarea>
-      </div>
-      <button class="btn" onclick="submitGrievance()">📨 Submit Anonymously</button>
-    </div>
-
-    <div class="card">
-      <div class="card-title"><span class="icon">📬</span> Submitted Notes (Supervisor View)</div>
-      <div id="grievance-list"></div>
-    </div>
-  </div>
-</div>
-
-<!-- ===================== TAB: ADMIN ===================== -->
-<div class="tab-panel" id="tab-admin">
-  <div class="content">
-    <div class="card">
-      <div class="card-title"><span class="icon">📤</span> Export Data</div>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:16px;font-family:var(--font-mono);">
-        Export all driver issues and calendar events as a CSV file for records.
-      </p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn green" onclick="exportCSV()">📊 Export Issues CSV</button>
-        <button class="btn secondary" onclick="exportCalendarCSV()">📅 Export Calendar CSV</button>
-        <button class="btn secondary" onclick="exportGrievanceCSV()">🔒 Export Notes CSV</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title"><span class="icon">🔄</span> Data Reset Settings</div>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:16px;font-family:var(--font-mono);">
-        Data auto-resets <strong>2 days after the end of each month</strong>. You will receive a <strong>72-hour warning</strong> before any reset occurs (never on the 1st of a month).
-      </p>
-      <div id="reset-status" style="font-family:var(--font-mono);font-size:13px;color:var(--green);"></div>
-      <hr>
-      <p style="color:var(--muted);font-size:12px;font-family:var(--font-mono);margin-bottom:12px;">Danger zone — only use if needed:</p>
-      <button class="btn danger" onclick="confirmReset()">🗑️ Manual Reset All Data</button>
-    </div>
-
-    <div class="card">
-      <div class="card-title"><span class="icon">📊</span> Quick Summary</div>
-      <div id="admin-summary"></div>
-    </div>
-  </div>
-</div>
-
-<!-- ===================== TAB: QR ===================== -->
-<div class="tab-panel" id="tab-qr">
-  <div class="content">
-    <div class="card">
-      <div class="card-title"><span class="icon">📱</span> QR Code — Share This Portal</div>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:16px;font-family:var(--font-mono);">
-        Workers can scan this QR code with their phone camera to instantly access Team Hub.
-      </p>
-      <div id="qrcode"></div>
-      <div style="margin-top:16px;">
-        <label>Page URL (copy & share)</label>
-        <input type="text" id="page-url" readonly onclick="this.select()" style="margin-top:6px;font-family:var(--font-mono);font-size:12px;cursor:pointer;">
-      </div>
-      <button class="btn secondary" style="margin-top:12px;" onclick="copyURL()">📋 Copy Link</button>
-    </div>
-    <div class="card">
-      <div class="card-title"><span class="icon">🚀</span> GitHub Deployment Guide</div>
-      <div style="font-family:var(--font-mono);font-size:13px;color:var(--muted);line-height:2;">
-        <p>1. Create a new repository on <strong style="color:var(--text);">github.com</strong></p>
-        <p>2. Upload <strong style="color:var(--accent);">index.html</strong> as the only file</p>
-        <p>3. Go to <strong style="color:var(--text);">Settings → Pages</strong></p>
-        <p>4. Set source to <strong style="color:var(--text);">main branch / root</strong></p>
-        <p>5. Your URL will be: <strong style="color:var(--accent);">https://yourusername.github.io/repo-name</strong></p>
-        <p>6. Paste that URL into the box above to regenerate QR code</p>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ===================== CALENDAR DAY MODAL ===================== -->
+<!-- DAY MODAL -->
 <div class="modal-overlay" id="day-modal">
   <div class="modal">
-    <div class="modal-title" id="day-modal-title">Events on ...</div>
+    <div class="modal-title" id="day-modal-title">Events</div>
     <div id="day-modal-events"></div>
-    <div class="modal-footer">
-      <button class="btn secondary" onclick="closeModal('day-modal')">Close</button>
-    </div>
+    <div class="modal-footer"><button class="btn secondary" onclick="closeModal('day-modal')">Close</button></div>
   </div>
 </div>
 
-<!-- PHOTO LIGHTBOX -->
+<!-- LIGHTBOX -->
 <div id="lightbox" onclick="closeLightbox()">
   <button id="lightbox-close" onclick="closeLightbox()">✕</button>
-  <img id="lightbox-img" src="" alt="Full size photo">
+  <img id="lightbox-img" src="" alt="Full photo">
 </div>
 
-<!-- TOAST -->
 <div id="toast"></div>
 
 <script>
-/* =====================================================
-   TEAMHUB — COMPLETE APPLICATION LOGIC
-   ===================================================== */
+/* ============================================================
+   TEAMHUB v2 — COMPLETE APPLICATION LOGIC
+   Modules: Firebase, Admin PIN, Reporting/Charts, History
+============================================================ */
 
-// ── Storage keys ──────────────────────────────────────
-const KEY_ISSUES    = 'teamhub_issues';
-const KEY_EVENTS    = 'teamhub_events';
-const KEY_GRIEVANCE = 'teamhub_grievance';
-const KEY_LAST_RESET= 'teamhub_last_reset';
+// Storage keys
+const KEY_ISSUES    = 'th_issues';
+const KEY_EVENTS    = 'th_events';
+const KEY_GRIEVANCE = 'th_grievance';
+const KEY_HISTORY   = 'th_history';
+const KEY_LAST_RESET= 'th_lastreset';
+const KEY_PIN       = 'th_pin';
+const KEY_FB_CFG    = 'th_fbcfg';
+const DEFAULT_PIN   = '1234';
 
-// ── State ─────────────────────────────────────────────
-let currentPhotoData = null;   // base64 of uploaded photo
-let calYear, calMonth;          // calendar display month
+// App state
+let currentPhotoData = null;
+let calYear, calMonth;
+let adminUnlocked = false;
+let db = null;
+let charts = {};  // Chart.js instances keyed by ID
 
-// ── Utilities ─────────────────────────────────────────
-// Load JSON array from localStorage, safely
-function load(key) {
-  try { return JSON.parse(localStorage.getItem(key)) || []; }
-  catch(e) { return []; }
-}
-// Save data array to localStorage
-function save(key, arr) { localStorage.setItem(key, JSON.stringify(arr)); }
+// Set Chart.js defaults for dark theme
+Chart.defaults.color = '#7a8299';
+Chart.defaults.borderColor = '#2a3045';
+Chart.defaults.font.family = 'IBM Plex Mono';
 
-// Format a JS Date to readable string
-function fmtDate(ts) {
-  return new Date(ts).toLocaleString('en-US', {
-    month:'short', day:'numeric', year:'numeric',
-    hour:'2-digit', minute:'2-digit'
-  });
-}
+// ── Core storage helpers ───────────────────────────────────
+function load(k) { try { return JSON.parse(localStorage.getItem(k)) || []; } catch(e) { return []; } }
+function save(k, v) { localStorage.setItem(k, JSON.stringify(v)); }
+function fmtDate(ts) { return new Date(ts).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+function escapeHTML(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-// Show a brief toast notification
-function toast(msg, isError = false) {
+function toast(msg, err=false) {
   const t = document.getElementById('toast');
   t.textContent = msg;
-  t.style.background = isError ? '#e84545' : 'var(--green)';
-  t.style.color = isError ? '#fff' : '#000';
+  t.style.background = err ? '#e84545' : 'var(--green)';
+  t.style.color = err ? '#fff' : '#000';
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
+  setTimeout(()=>t.classList.remove('show'), 3000);
 }
 
-// ── Clock ─────────────────────────────────────────────
-function updateClock() {
-  const now = new Date();
-  document.getElementById('current-date').textContent =
-    now.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric', year:'numeric'});
-  document.getElementById('current-time').textContent =
-    now.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-}
-setInterval(updateClock, 1000);
-updateClock();
-
-// ── Tab Navigation ────────────────────────────────────
-function switchTab(id) {
-  // Hide all panels
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  // Show selected
-  document.getElementById('tab-' + id).classList.add('active');
-  event.target.classList.add('active');
-
-  // Trigger renders on tab switch
-  if (id === 'issues') renderIssues();
-  if (id === 'calendar') renderCalendar();
-  if (id === 'grievance') renderGrievances();
-  if (id === 'admin') renderAdmin();
-  if (id === 'qr') setupQR();
+function killChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
 }
 
-// ── Default datetime to now ───────────────────────────
-(function setDefaultTime() {
-  const now = new Date();
-  // Format: YYYY-MM-DDTHH:MM
-  const pad = n => String(n).padStart(2,'0');
-  const dtStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  document.getElementById('issue-time').value = dtStr;
-  document.getElementById('event-date').value = dtStr.slice(0,10);
+function colorHex(c) { return {blue:'#4a90e2',green:'#2dce89',red:'#e84545'}[c]||'#f5a623'; }
+function routeCC(r)   { return {RT11:'rt11',RT12:'rt12',RT13:'rt13',RT27:'rt27'}[r]||''; }
+
+// ── Clock ──────────────────────────────────────────────────
+function tick() {
+  const n = new Date();
+  document.getElementById('current-date').textContent = n.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+  document.getElementById('current-time').textContent = n.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(tick,1000); tick();
+
+// ============================================================
+//  FIREBASE
+// ============================================================
+function loadFirebaseConfig() {
+  const raw = localStorage.getItem(KEY_FB_CFG);
+  if (!raw) return;
+  try {
+    const cfg = JSON.parse(raw);
+    connectFirebase(cfg);
+    // Re-fill admin form fields
+    ['apiKey','authDomain','projectId','appId'].forEach(k => {
+      const el = document.getElementById('fb-'+k);
+      if (el && cfg[k]) el.value = cfg[k];
+    });
+  } catch(e) { console.warn('FB config load error:', e); }
+}
+
+function connectFirebase(cfg) {
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(cfg);
+    db = firebase.firestore();
+    save(KEY_FB_CFG, cfg);
+    setDBStatus(true);
+    startListeners();
+    toast('🔥 Firebase connected — live data active!');
+  } catch(e) {
+    console.error('Firebase error:', e);
+    toast('Firebase connection failed — check config.', true);
+    db = null; setDBStatus(false);
+  }
+}
+
+function saveFirebaseConfig() {
+  const cfg = {
+    apiKey:     document.getElementById('fb-apiKey').value.trim(),
+    authDomain: document.getElementById('fb-authDomain').value.trim(),
+    projectId:  document.getElementById('fb-projectId').value.trim(),
+    appId:      document.getElementById('fb-appId').value.trim(),
+  };
+  if (!cfg.apiKey || !cfg.projectId) { toast('API Key and Project ID required.', true); return; }
+  connectFirebase(cfg);
+}
+
+function disconnectFirebase() {
+  db = null;
+  localStorage.removeItem(KEY_FB_CFG);
+  setDBStatus(false);
+  toast('Disconnected. Using local storage.');
+  renderIssues(); renderCalendar(); renderGrievances();
+}
+
+function setDBStatus(on) {
+  const el = document.getElementById('db-status');
+  el.textContent = on ? '⬤ LIVE' : '⬤ LOCAL';
+  el.className = 'db-status' + (on ? ' connected' : '');
+  const notice = document.getElementById('fb-notice');
+  if (notice) notice.innerHTML = on
+    ? '<strong style="color:var(--green)">✅ Firebase Connected</strong> — all devices share live data.'
+    : '⚙️ <strong>Not Connected</strong> — fill in config to enable shared live data.';
+}
+
+// Real-time Firestore listeners — fires on every remote change
+function startListeners() {
+  if (!db) return;
+  db.collection('issues').orderBy('logged','desc').onSnapshot(s => {
+    const data = s.docs.map(d => ({id:d.id, ...d.data()}));
+    save(KEY_ISSUES, data);
+    renderIssues();
+  }, e => console.warn('Issues listener:', e));
+
+  db.collection('events').onSnapshot(s => {
+    const data = s.docs.map(d => ({id:d.id, ...d.data()}));
+    save(KEY_EVENTS, data);
+    renderCalendar();
+  }, e => console.warn('Events listener:', e));
+
+  db.collection('grievances').orderBy('ts','desc').onSnapshot(s => {
+    const data = s.docs.map(d => ({id:d.id, ...d.data()}));
+    save(KEY_GRIEVANCE, data);
+    renderGrievances();
+  }, e => console.warn('Grievance listener:', e));
+}
+
+// ============================================================
+//  AUDIT HISTORY
+// ============================================================
+function logHistory(action, type, detail) {
+  const h = load(KEY_HISTORY);
+  h.unshift({ id:Date.now(), action, type, detail, ts:Date.now() });
+  if (h.length > 500) h.pop(); // keep max 500 entries
+  save(KEY_HISTORY, h);
+}
+
+function renderHistory() {
+  const h      = load(KEY_HISTORY);
+  const filter = document.getElementById('hist-filter').value;
+  const search = (document.getElementById('hist-search').value||'').toLowerCase();
+  const filtered = h.filter(e => {
+    if (filter && e.action !== filter && !(filter==='edit' && e.action==='edit')) return false;
+    if (filter === 'edit' && e.action !== 'edit') return false;
+    if (search && !e.detail.toLowerCase().includes(search) && !e.type.includes(search)) return false;
+    return true;
+  });
+  const list = document.getElementById('history-list');
+  if (!filtered.length) { list.innerHTML='<div class="empty"><div class="icon">📭</div>No history yet.</div>'; return; }
+  list.innerHTML = filtered.map(e => `
+    <div class="history-entry">
+      <div class="history-dot ${e.action}"></div>
+      <div>
+        <div class="history-text"><strong>${escapeHTML(e.action.toUpperCase())}</strong> [${escapeHTML(e.type)}] — ${escapeHTML(e.detail)}</div>
+        <div class="history-meta">${fmtDate(e.ts)}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ============================================================
+//  ADMIN PIN
+// ============================================================
+function checkAdminAccess() {
+  if (adminUnlocked) return true;
+  document.getElementById('pin-screen').classList.add('open');
+  document.getElementById('pin-input').value = '';
+  document.getElementById('pin-error').textContent = '';
+  setTimeout(()=>document.getElementById('pin-input').focus(), 100);
+  return false;
+}
+
+function verifyPin() {
+  const entered = document.getElementById('pin-input').value;
+  const stored  = localStorage.getItem(KEY_PIN) || DEFAULT_PIN;
+  if (entered === stored) {
+    adminUnlocked = true;
+    document.getElementById('pin-screen').classList.remove('open');
+    document.getElementById('admin-tab-btn').classList.remove('locked');
+    // Activate admin tab visually
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById('admin-tab-btn').classList.add('active');
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    document.getElementById('tab-admin').classList.add('active');
+    renderAdmin();
+  } else {
+    document.getElementById('pin-error').textContent = '❌ Incorrect PIN.';
+    document.getElementById('pin-input').value = '';
+    logHistory('edit','system','Failed admin PIN attempt');
+  }
+}
+
+function closePinScreen() { document.getElementById('pin-screen').classList.remove('open'); }
+
+function changePin() {
+  const n = document.getElementById('new-pin').value;
+  const c = document.getElementById('confirm-pin').value;
+  if (!n || n.length < 4) { toast('PIN must be 4+ digits.', true); return; }
+  if (n !== c) { toast('PINs do not match.', true); return; }
+  if (!/^\d+$/.test(n)) { toast('Digits only.', true); return; }
+  localStorage.setItem(KEY_PIN, n);
+  document.getElementById('new-pin').value = '';
+  document.getElementById('confirm-pin').value = '';
+  logHistory('edit','system','Admin PIN changed');
+  toast('✅ PIN updated!');
+}
+
+// ============================================================
+//  TAB NAVIGATION
+// ============================================================
+function switchTab(id, btn) {
+  if (id === 'admin' && !adminUnlocked) { checkAdminAccess(); return; }
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  if (btn) btn.classList.add('active');
+  const renders = { issues:renderIssues, calendar:renderCalendar, reports:renderReports, admin:renderAdmin, grievance:renderGrievances, history:renderHistory, qr:setupQR };
+  if (renders[id]) renders[id]();
+}
+
+// ============================================================
+//  DEFAULTS
+// ============================================================
+(function setDefaults() {
+  const n   = new Date();
+  const pad = x => String(x).padStart(2,'0');
+  const dt  = `${n.getFullYear()}-${pad(n.getMonth()+1)}-${pad(n.getDate())}T${pad(n.getHours())}:${pad(n.getMinutes())}`;
+  document.getElementById('issue-time').value  = dt;
+  document.getElementById('event-date').value  = dt.slice(0,10);
+  document.getElementById('rpt-from').value    = `${n.getFullYear()}-${pad(n.getMonth()+1)}-01`;
+  document.getElementById('rpt-to').value      = dt.slice(0,10);
+  calYear  = n.getFullYear();
+  calMonth = n.getMonth();
 })();
 
-// ── Photo Upload Handler ──────────────────────────────
+// ============================================================
+//  PHOTO UPLOAD (resized before storing)
+// ============================================================
 function handlePhotoUpload(e) {
   const file = e.target.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    currentPhotoData = ev.target.result; // store base64
-    const preview = document.getElementById('photo-preview');
-    preview.src = currentPhotoData;
-    preview.style.display = 'block';
+  const img = new Image();
+  const r   = new FileReader();
+  r.onload = ev => {
+    img.src = ev.target.result;
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      const maxW = 800, maxH = 600;
+      if (w > maxW) { h = h*maxW/w; w = maxW; }
+      if (h > maxH) { w = w*maxH/h; h = maxH; }
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      currentPhotoData = c.toDataURL('image/jpeg', 0.7);
+      const p = document.getElementById('photo-preview');
+      p.src = currentPhotoData; p.style.display = 'block';
+    };
   };
-  reader.readAsDataURL(file); // convert to base64 for localStorage storage
+  r.readAsDataURL(file);
 }
 
-// ── Route color helper ────────────────────────────────
-function routeClass(r) { return r.toLowerCase().replace('rt','rt'); }
-function routeColorClass(r) {
-  const m = {RT11:'rt11', RT12:'rt12', RT13:'rt13', RT27:'rt27'};
-  return m[r] || '';
-}
-
-// ======================================================
-// DRIVER ISSUES
-// ======================================================
-function submitIssue() {
+// ============================================================
+//  DRIVER ISSUES
+// ============================================================
+async function submitIssue() {
   const route = document.getElementById('route-select').value;
   const time  = document.getElementById('issue-time').value;
   const desc  = document.getElementById('issue-desc').value.trim();
+  if (!route) { toast('Select a route.', true); return; }
+  if (!time)  { toast('Enter an incident time.', true); return; }
+  if (!desc)  { toast('Describe the issue.', true); return; }
 
-  // Validation: all required fields must be filled
-  if (!route) { toast('Please select a route.', true); return; }
-  if (!time)  { toast('Please enter an incident time.', true); return; }
-  if (!desc)  { toast('Please describe the issue.', true); return; }
+  const issue = { route, time:new Date(time).getTime(), desc, photo:currentPhotoData||null, logged:Date.now() };
 
-  const issues = load(KEY_ISSUES);
-  issues.push({
-    id: Date.now(),           // unique ID based on timestamp
-    route,
-    time: new Date(time).getTime(), // store as timestamp
-    desc,
-    photo: currentPhotoData || null,
-    logged: Date.now()
-  });
-  save(KEY_ISSUES, issues);
-
-  // Reset form
-  document.getElementById('route-select').value = '';
-  document.getElementById('issue-desc').value = '';
-  document.getElementById('photo-preview').style.display = 'none';
-  currentPhotoData = null;
-  document.getElementById('photo-input').value = '';
-
-  toast('✅ Issue logged successfully!');
-  renderIssues();
-}
-
-function renderIssues() {
-  const issues     = load(KEY_ISSUES);
-  const filterRoute= document.getElementById('filter-route').value;
-  const filterText = (document.getElementById('filter-search').value || '').toLowerCase();
-
-  // Filter issues based on route + search text
-  let filtered = issues.filter(i => {
-    if (filterRoute && i.route !== filterRoute) return false;
-    if (filterText && !i.desc.toLowerCase().includes(filterText)) return false;
-    return true;
-  }).sort((a,b) => b.logged - a.logged); // newest first
-
-  // Update stats counters
-  document.getElementById('stat-total').textContent = issues.length;
-  document.getElementById('stat-rt11').textContent  = issues.filter(i=>i.route==='RT11').length;
-  document.getElementById('stat-rt12').textContent  = issues.filter(i=>i.route==='RT12').length;
-  document.getElementById('stat-rt13rt27').textContent = issues.filter(i=>i.route==='RT13'||i.route==='RT27').length;
-
-  const list = document.getElementById('issue-list');
-  if (!filtered.length) {
-    list.innerHTML = `<div class="empty"><div class="icon">📭</div>No issues found.</div>`;
-    return;
+  if (db) {
+    try { await db.collection('issues').add(issue); }
+    catch(e) { localPush(KEY_ISSUES, {id:Date.now(),...issue}); renderIssues(); }
+  } else {
+    localPush(KEY_ISSUES, {id:Date.now(),...issue});
+    renderIssues();
   }
 
-  list.innerHTML = filtered.map(i => `
-    <div class="issue-entry ${routeColorClass(i.route)}">
-      <button class="del-btn" onclick="deleteIssue(${i.id})" title="Delete">✕</button>
-      <div class="issue-header">
-        <span class="issue-route badge badge-${routeColorClass(i.route)}">${i.route}</span>
-        <span class="issue-time">Incident: ${fmtDate(i.time)} &nbsp;|&nbsp; Logged: ${fmtDate(i.logged)}</span>
-      </div>
-      <div class="issue-text">${escapeHTML(i.desc)}</div>
-      ${i.photo ? `<img class="issue-photo" src="${i.photo}" alt="Photo" onclick="openLightbox('${i.photo}')">` : ''}
-    </div>
-  `).join('');
+  logHistory('add','issue',`${route} — "${desc.slice(0,60)}"`);
+  document.getElementById('route-select').value = '';
+  document.getElementById('issue-desc').value   = '';
+  document.getElementById('photo-preview').style.display = 'none';
+  document.getElementById('photo-input').value  = '';
+  currentPhotoData = null;
+  toast('✅ Issue logged!');
 }
 
-function deleteIssue(id) {
-  if (!confirm('Delete this issue entry?')) return;
-  let issues = load(KEY_ISSUES);
-  issues = issues.filter(i => i.id !== id); // remove the one matching ID
-  save(KEY_ISSUES, issues);
-  renderIssues();
+function localPush(key, item) {
+  const arr = load(key);
+  arr.unshift(item);
+  save(key, arr);
+}
+
+async function deleteIssue(id) {
+  if (!confirm('Delete this issue?')) return;
+  if (db) {
+    try { await db.collection('issues').doc(String(id)).delete(); }
+    catch(e) { localDel(KEY_ISSUES, id); renderIssues(); }
+  } else {
+    localDel(KEY_ISSUES, id);
+    renderIssues();
+  }
+  logHistory('del','issue',`Deleted issue ${id}`);
   toast('Issue deleted.');
 }
 
-// Escape HTML to prevent XSS from user input
-function escapeHTML(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function localDel(key, id) {
+  save(key, load(key).filter(x => String(x.id) !== String(id)));
 }
 
-// ======================================================
-// CALENDAR
-// ======================================================
-(function initCalendar() {
-  const now = new Date();
-  calYear  = now.getFullYear();
-  calMonth = now.getMonth(); // 0-indexed
-})();
+function renderIssues() {
+  const issues  = load(KEY_ISSUES);
+  const fRoute  = document.getElementById('filter-route').value;
+  const fSearch = (document.getElementById('filter-search').value||'').toLowerCase();
+  const fFrom   = document.getElementById('filter-date-from').value;
+  const fTo     = document.getElementById('filter-date-to').value;
 
-function changeMonth(dir) {
-  calMonth += dir;
-  if (calMonth < 0)  { calMonth = 11; calYear--; }
-  if (calMonth > 11) { calMonth = 0;  calYear++; }
+  const filtered = issues.filter(i => {
+    if (fRoute  && i.route !== fRoute) return false;
+    if (fSearch && !i.desc.toLowerCase().includes(fSearch)) return false;
+    if (fFrom && i.logged < new Date(fFrom+'T00:00:00').getTime()) return false;
+    if (fTo   && i.logged > new Date(fTo+'T23:59:59').getTime())   return false;
+    return true;
+  });
+
+  document.getElementById('stat-total').textContent  = issues.length;
+  document.getElementById('stat-rt11').textContent   = issues.filter(i=>i.route==='RT11').length;
+  document.getElementById('stat-rt12').textContent   = issues.filter(i=>i.route==='RT12').length;
+  document.getElementById('stat-rt1327').textContent = issues.filter(i=>i.route==='RT13'||i.route==='RT27').length;
+
+  const list = document.getElementById('issue-list');
+  if (!filtered.length) { list.innerHTML='<div class="empty"><div class="icon">📭</div>No issues match filters.</div>'; return; }
+  list.innerHTML = filtered.map(i=>`
+    <div class="issue-entry ${routeCC(i.route)}">
+      <button class="del-btn" onclick="deleteIssue('${i.id}')">✕</button>
+      <div class="issue-header">
+        <span class="badge badge-${routeCC(i.route)}">${escapeHTML(i.route)}</span>
+        <span class="issue-time">Incident: ${fmtDate(i.time)} | Logged: ${fmtDate(i.logged)}</span>
+      </div>
+      <div class="issue-text">${escapeHTML(i.desc)}</div>
+      ${i.photo?`<img class="issue-photo" src="${i.photo}" alt="Photo" onclick="openLightbox('${i.photo}')">`:'' }
+    </div>`).join('');
+}
+
+// ============================================================
+//  CALENDAR
+// ============================================================
+function changeMonth(d) {
+  calMonth += d;
+  if (calMonth < 0)  { calMonth=11; calYear--; }
+  if (calMonth > 11) { calMonth=0;  calYear++; }
   renderCalendar();
 }
 
 function renderCalendar() {
-  const MONTHS = ['January','February','March','April','May','June',
-                  'July','August','September','October','November','December'];
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-
   document.getElementById('cal-month-label').textContent = `${MONTHS[calMonth]} ${calYear}`;
+  const events   = load(KEY_EVENTS);
+  const today    = new Date();
+  const firstDay = new Date(calYear,calMonth,1).getDay();
+  const daysInMo = new Date(calYear,calMonth+1,0).getDate();
+  const daysInPv = new Date(calYear,calMonth,0).getDate();
 
-  const events = load(KEY_EVENTS);
-  const today  = new Date();
-
-  // First day of the month and total days in month
-  const firstDay  = new Date(calYear, calMonth, 1).getDay(); // day of week (0=Sun)
-  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
-  const daysInPrev  = new Date(calYear, calMonth, 0).getDate();
-
-  let html = DAYS.map(d => `<div class="cal-day-label">${d}</div>`).join('');
-
-  // Fill in leading empty cells (previous month's days shown greyed)
-  for (let i = 0; i < firstDay; i++) {
-    const dayNum = daysInPrev - firstDay + 1 + i;
-    html += `<div class="cal-day other-month"><div class="cal-day-num">${dayNum}</div></div>`;
+  let html = DAYS.map(d=>`<div class="cal-day-label">${d}</div>`).join('');
+  for (let i=0;i<firstDay;i++) html += `<div class="cal-day other-month"><div class="cal-day-num">${daysInPv-firstDay+1+i}</div></div>`;
+  for (let d=1;d<=daysInMo;d++) {
+    const isToday = d===today.getDate() && calMonth===today.getMonth() && calYear===today.getFullYear();
+    const evts = events.filter(e=>{ const ed=new Date(e.date+'T00:00:00'); return ed.getDate()===d && ed.getMonth()===calMonth && ed.getFullYear()===calYear; });
+    html += `<div class="cal-day${isToday?' today':''}" onclick="showDayModal(${d})">
+      <div class="cal-day-num">${d}</div>
+      ${evts.map(e=>`<div class="cal-event ${e.color||''}" title="${escapeHTML(e.title)}">${escapeHTML(e.title)}</div>`).join('')}
+    </div>`;
   }
-
-  // Fill in current month's days
-  for (let d = 1; d <= daysInMonth; d++) {
-    const isToday = (d === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear());
-    // Find events for this day
-    const dayEvents = events.filter(e => {
-      const eDate = new Date(e.date + 'T00:00:00');
-      return eDate.getDate() === d && eDate.getMonth() === calMonth && eDate.getFullYear() === calYear;
-    });
-    const evHTML = dayEvents.map(e =>
-      `<div class="cal-event ${e.color || ''}" title="${escapeHTML(e.title)}">${escapeHTML(e.title)}</div>`
-    ).join('');
-    html += `
-      <div class="cal-day${isToday?' today':''}" onclick="showDayModal(${d})">
-        <div class="cal-day-num">${d}</div>
-        ${evHTML}
-      </div>`;
-  }
-
-  // Fill trailing cells to complete the grid
-  const totalCells = firstDay + daysInMonth;
-  const trailing   = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
-  for (let i = 1; i <= trailing; i++) {
-    html += `<div class="cal-day other-month"><div class="cal-day-num">${i}</div></div>`;
-  }
-
+  const tail = (firstDay+daysInMo)%7;
+  for (let i=1; tail && i<=7-tail; i++) html += `<div class="cal-day other-month"><div class="cal-day-num">${i}</div></div>`;
   document.getElementById('cal-grid').innerHTML = html;
   renderEventList();
 }
 
-function addEvent() {
+async function addEvent() {
   const title = document.getElementById('event-title').value.trim();
   const date  = document.getElementById('event-date').value;
   const color = document.getElementById('event-color').value;
   const note  = document.getElementById('event-note').value.trim();
-
-  if (!title) { toast('Please enter an event title.', true); return; }
-  if (!date)  { toast('Please select a date.', true); return; }
-
-  const events = load(KEY_EVENTS);
-  events.push({ id: Date.now(), title, date, color, note });
-  save(KEY_EVENTS, events);
-
+  if (!title) { toast('Enter event title.', true); return; }
+  if (!date)  { toast('Select a date.', true); return; }
+  const ev = {title, date, color, note};
+  if (db) { try { await db.collection('events').add(ev); } catch(e) { localPush(KEY_EVENTS,{id:Date.now(),...ev}); renderCalendar(); } }
+  else { localPush(KEY_EVENTS,{id:Date.now(),...ev}); renderCalendar(); }
+  logHistory('add','event',`"${title}" on ${date}`);
   document.getElementById('event-title').value = '';
-  document.getElementById('event-note').value = '';
+  document.getElementById('event-note').value  = '';
   toast('📅 Event added!');
-  renderCalendar();
 }
 
-function renderEventList() {
-  const events = load(KEY_EVENTS);
-  const today  = new Date().toISOString().slice(0,10);
-  // Show upcoming events sorted by date
-  const upcoming = events
-    .filter(e => e.date >= today)
-    .sort((a,b) => a.date.localeCompare(b.date));
-
-  const list = document.getElementById('event-list');
-  if (!upcoming.length) {
-    list.innerHTML = `<div class="empty"><div class="icon">📭</div>No upcoming events.</div>`;
-    return;
-  }
-  list.innerHTML = upcoming.map(e => `
-    <div class="issue-entry" style="border-left-color:${colorHex(e.color)}">
-      <button class="del-btn" onclick="deleteEvent(${e.id})">✕</button>
-      <div class="issue-header">
-        <strong>${escapeHTML(e.title)}</strong>
-        <span class="issue-time">${e.date}</span>
-      </div>
-      ${e.note ? `<div class="issue-text" style="color:var(--muted)">${escapeHTML(e.note)}</div>` : ''}
-    </div>
-  `).join('');
-}
-
-function colorHex(c) {
-  const m = {blue:'#4a90e2', green:'#2dce89', red:'#e84545'};
-  return m[c] || '#f5a623';
-}
-
-function deleteEvent(id) {
-  let events = load(KEY_EVENTS).filter(e => e.id !== id);
-  save(KEY_EVENTS, events);
-  renderCalendar();
+async function deleteEvent(id) {
+  if (db) { try { await db.collection('events').doc(String(id)).delete(); } catch(e) { localDel(KEY_EVENTS,id); renderCalendar(); } }
+  else { localDel(KEY_EVENTS,id); renderCalendar(); }
+  logHistory('del','event',`Deleted event ${id}`);
   toast('Event removed.');
 }
 
+function renderEventList() {
+  const today   = new Date().toISOString().slice(0,10);
+  const upcomng = load(KEY_EVENTS).filter(e=>e.date>=today).sort((a,b)=>a.date.localeCompare(b.date));
+  const list    = document.getElementById('event-list');
+  if (!upcomng.length) { list.innerHTML='<div class="empty"><div class="icon">📭</div>No upcoming events.</div>'; return; }
+  list.innerHTML = upcomng.map(e=>`
+    <div class="issue-entry" style="border-left-color:${colorHex(e.color)}">
+      <button class="del-btn" onclick="deleteEvent('${e.id}')">✕</button>
+      <div class="issue-header"><strong>${escapeHTML(e.title)}</strong><span class="issue-time">${e.date}</span></div>
+      ${e.note?`<div class="issue-text" style="color:var(--muted)">${escapeHTML(e.note)}</div>`:''}
+    </div>`).join('');
+}
+
 function showDayModal(day) {
-  const events = load(KEY_EVENTS).filter(e => {
-    const d = new Date(e.date + 'T00:00:00');
-    return d.getDate() === day && d.getMonth() === calMonth && d.getFullYear() === calYear;
-  });
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const evts   = load(KEY_EVENTS).filter(e=>{ const d=new Date(e.date+'T00:00:00'); return d.getDate()===day && d.getMonth()===calMonth && d.getFullYear()===calYear; });
   document.getElementById('day-modal-title').textContent = `${MONTHS[calMonth]} ${day}, ${calYear}`;
-  document.getElementById('day-modal-events').innerHTML = events.length
-    ? events.map(e => `
-        <div class="anon-note" style="border-left-color:${colorHex(e.color)}">
-          <strong>${escapeHTML(e.title)}</strong>
-          ${e.note ? `<div style="margin-top:4px;color:var(--muted)">${escapeHTML(e.note)}</div>` : ''}
-        </div>`).join('')
-    : '<div class="empty" style="padding:20px 0"><div class="icon">📭</div>No events this day.</div>';
+  document.getElementById('day-modal-events').innerHTML  = evts.length
+    ? evts.map(e=>`<div class="anon-note" style="border-left-color:${colorHex(e.color)}"><strong>${escapeHTML(e.title)}</strong>${e.note?`<div style="margin-top:4px;color:var(--muted)">${escapeHTML(e.note)}</div>`:''}</div>`).join('')
+    : '<div class="empty" style="padding:20px 0"><div class="icon">📭</div>No events.</div>';
   document.getElementById('day-modal').classList.add('open');
 }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
-// ======================================================
-// ANONYMOUS GRIEVANCE BOX
-// ======================================================
-function submitGrievance() {
-  const text = document.getElementById('grievance-text').value.trim();
-  if (!text) { toast('Please write a message before submitting.', true); return; }
+// ============================================================
+//  REPORTING DASHBOARD
+// ============================================================
+function resetRptDates() {
+  document.getElementById('rpt-from').value = '';
+  document.getElementById('rpt-to').value   = '';
+  renderReports();
+}
 
-  const notes = load(KEY_GRIEVANCE);
-  notes.push({
-    id: Date.now(),
-    text,
-    ts: Date.now()   // timestamp only; no user ID stored
+function renderReports() {
+  const allIssues = load(KEY_ISSUES);
+  const from = document.getElementById('rpt-from').value;
+  const to   = document.getElementById('rpt-to').value;
+  const issues = allIssues.filter(i => {
+    if (from && i.logged < new Date(from+'T00:00:00').getTime()) return false;
+    if (to   && i.logged > new Date(to+'T23:59:59').getTime())   return false;
+    return true;
   });
-  save(KEY_GRIEVANCE, notes);
+
+  // KPI
+  document.getElementById('rpt-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-val">${issues.length}</div><div class="stat-label">Total Issues</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:#4a90e2">${issues.filter(i=>i.route==='RT11').length}</div><div class="stat-label">RT11</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:#f5a623">${issues.filter(i=>i.route==='RT12').length}</div><div class="stat-label">RT12</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:#2dce89">${issues.filter(i=>i.route==='RT13'||i.route==='RT27').length}</div><div class="stat-label">RT13+RT27</div></div>`;
+
+  // Chart 1: Doughnut by route
+  killChart('route');
+  const routes = ['RT11','RT12','RT13','RT27'];
+  charts['route'] = new Chart(document.getElementById('chart-route').getContext('2d'), {
+    type:'doughnut',
+    data:{ labels:routes, datasets:[{ data:routes.map(r=>issues.filter(i=>i.route===r).length), backgroundColor:['#4a90e2','#f5a623','#2dce89','#e84545'], borderWidth:0 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ padding:12, font:{size:11} } } } }
+  });
+
+  // Chart 2: Line — weekly trend
+  killChart('trend');
+  const weekMap = {};
+  issues.forEach(i => {
+    const d  = new Date(i.logged);
+    const mo = new Date(d);
+    mo.setDate(d.getDate() - (d.getDay()===0?6:d.getDay()-1));
+    const key = mo.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    weekMap[key] = (weekMap[key]||0) + 1;
+  });
+  const wk = Object.keys(weekMap).slice(-8);
+  charts['trend'] = new Chart(document.getElementById('chart-trend').getContext('2d'), {
+    type:'line',
+    data:{ labels:wk, datasets:[{ label:'Issues/Week', data:wk.map(k=>weekMap[k]), borderColor:'#f5a623', backgroundColor:'rgba(245,166,35,.1)', fill:true, tension:0.4, pointBackgroundColor:'#f5a623' }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{stepSize:1}}} }
+  });
+
+  // Chart 3: Bar — daily this week
+  killChart('daily');
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const now = new Date();
+  const ws  = new Date(now); ws.setDate(now.getDate()-now.getDay()); ws.setHours(0,0,0,0);
+  const dailyCounts = dayNames.map((_,idx) => {
+    const ds = new Date(ws); ds.setDate(ws.getDate()+idx);
+    const de = new Date(ds); de.setDate(ds.getDate()+1);
+    return issues.filter(i=>i.logged>=ds.getTime()&&i.logged<de.getTime()).length;
+  });
+  charts['daily'] = new Chart(document.getElementById('chart-daily').getContext('2d'), {
+    type:'bar',
+    data:{ labels:dayNames, datasets:[{ label:'Issues', data:dailyCounts, backgroundColor:dailyCounts.map((_,i)=>i===now.getDay()?'#f5a623':'#2a3045'), borderRadius:4 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{stepSize:1}}} }
+  });
+
+  // Chart 4: Horizontal bar — top keywords
+  killChart('keywords');
+  const stop = new Set(['the','and','was','were','for','with','that','this','have','has','not','from','they','are','its','but','had','been','she','his','her','him','all','can','out','one','our','who','more','will','also','into','than','then','when','what','just','like','over','such','said','some','very','even','back','only','come','year','your','about','most','their','them','time','each','make','does','than','other']);
+  const wm = {};
+  issues.forEach(i => i.desc.toLowerCase().replace(/[^a-z\s]/g,'').split(/\s+/).forEach(w => { if (w.length>3 && !stop.has(w)) wm[w]=(wm[w]||0)+1; }));
+  const top = Object.entries(wm).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  charts['keywords'] = new Chart(document.getElementById('chart-keywords').getContext('2d'), {
+    type:'bar',
+    data:{ labels:top.map(w=>w[0]), datasets:[{ label:'Count', data:top.map(w=>w[1]), backgroundColor:'#4a90e2', borderRadius:4 }] },
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true,ticks:{stepSize:1}}} }
+  });
+
+  // Table
+  const tbl = document.getElementById('rpt-table');
+  if (!issues.length) { tbl.innerHTML='<div class="empty"><div class="icon">📭</div>No issues in range.</div>'; return; }
+  tbl.innerHTML = `<table><thead><tr><th>Route</th><th>Incident</th><th>Description</th><th>Logged</th><th>📷</th></tr></thead><tbody>
+    ${issues.map(i=>`<tr>
+      <td><span class="badge badge-${routeCC(i.route)}">${escapeHTML(i.route)}</span></td>
+      <td>${fmtDate(i.time)}</td>
+      <td style="max-width:260px">${escapeHTML(i.desc.slice(0,80))}${i.desc.length>80?'…':''}</td>
+      <td>${fmtDate(i.logged)}</td>
+      <td style="text-align:center">${i.photo?'<span style="color:var(--green)">✓</span>':'—'}</td>
+    </tr>`).join('')}
+  </tbody></table>`;
+}
+
+// ============================================================
+//  GRIEVANCES
+// ============================================================
+async function submitGrievance() {
+  const text = document.getElementById('grievance-text').value.trim();
+  if (!text) { toast('Write a message first.', true); return; }
+  const note = { text, ts:Date.now() };  // no user ID — anonymous
+  if (db) { try { await db.collection('grievances').add(note); } catch(e) { localPush(KEY_GRIEVANCE,{id:Date.now(),...note}); renderGrievances(); } }
+  else { localPush(KEY_GRIEVANCE,{id:Date.now(),...note}); renderGrievances(); }
   document.getElementById('grievance-text').value = '';
-  toast('📨 Anonymous note submitted.');
-  renderGrievances();
+  toast('📨 Submitted anonymously.');
+  // Intentionally NOT logged to history — protects anonymity
 }
 
 function renderGrievances() {
-  const notes = load(KEY_GRIEVANCE).slice().reverse(); // newest first
+  const notes = load(KEY_GRIEVANCE);
   const list  = document.getElementById('grievance-list');
-  if (!notes.length) {
-    list.innerHTML = `<div class="empty"><div class="icon">📭</div>No anonymous notes yet.</div>`;
-    return;
-  }
-  list.innerHTML = notes.map(n => `
+  if (!notes.length) { list.innerHTML='<div class="empty"><div class="icon">📭</div>No anonymous notes yet.</div>'; return; }
+  list.innerHTML = notes.map(n=>`
     <div class="anon-note">
       <div>${escapeHTML(n.text)}</div>
       <div class="anon-note-meta">Received: ${fmtDate(n.ts)} — Anonymous</div>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
-// ======================================================
-// ADMIN / EXPORT / RESET
-// ======================================================
+// ============================================================
+//  ADMIN PANEL
+// ============================================================
 function renderAdmin() {
-  const issues    = load(KEY_ISSUES);
-  const events    = load(KEY_EVENTS);
-  const grievance = load(KEY_GRIEVANCE);
-
+  const issues = load(KEY_ISSUES), events = load(KEY_EVENTS), g = load(KEY_GRIEVANCE), h = load(KEY_HISTORY);
   document.getElementById('admin-summary').innerHTML = `
     <div class="stats-bar">
-      <div class="stat-card">
-        <div class="stat-val">${issues.length}</div>
-        <div class="stat-label">Driver Issues</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-val">${events.length}</div>
-        <div class="stat-label">Calendar Events</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-val">${grievance.length}</div>
-        <div class="stat-label">Anon Notes</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-val">${getStorageSize()}</div>
-        <div class="stat-label">Storage Used</div>
-      </div>
-    </div>
-  `;
-
-  // Show reset countdown
-  const status = getResetStatus();
-  document.getElementById('reset-status').textContent = status;
+      <div class="stat-card"><div class="stat-val">${issues.length}</div><div class="stat-label">Issues</div></div>
+      <div class="stat-card"><div class="stat-val">${events.length}</div><div class="stat-label">Events</div></div>
+      <div class="stat-card"><div class="stat-val">${g.length}</div><div class="stat-label">Anon Notes</div></div>
+      <div class="stat-card"><div class="stat-val">${h.length}</div><div class="stat-label">History Entries</div></div>
+    </div>`;
+  document.getElementById('reset-status').textContent = getResetStatus();
 }
 
-function getStorageSize() {
-  let total = 0;
-  for (let k of [KEY_ISSUES, KEY_EVENTS, KEY_GRIEVANCE]) {
-    total += (localStorage.getItem(k) || '').length;
-  }
-  return total > 1024 ? (total/1024).toFixed(1)+'KB' : total+'B';
-}
-
-// Calculate how many days until reset
 function getResetStatus() {
-  const now   = new Date();
-  const month = now.getMonth();
-  const year  = now.getFullYear();
-  // Last day of this month
-  const lastDay    = new Date(year, month+1, 0).getDate();
-  // Reset date = 2nd day of next month
-  const resetDate  = new Date(year, month+1, 2);
-  const daysToReset = Math.ceil((resetDate - now) / (1000*60*60*24));
-
-  if (now.getDate() === 1) return '✅ No reset scheduled on the 1st of the month.';
-  if (daysToReset <= 0) return '⚠️ Reset overdue — will reset on next page load.';
-  return `Next data reset: ${resetDate.toDateString()} (in ${daysToReset} day${daysToReset===1?'':'s'})`;
+  const n = new Date();
+  if (n.getDate()===1) return '✅ No reset on the 1st of the month.';
+  const rd = new Date(n.getFullYear(), n.getMonth()+1, 2);
+  const d  = Math.ceil((rd-n)/(1000*60*60*24));
+  return d<=0 ? '⚠️ Reset overdue.' : `Next reset: ${rd.toDateString()} (${d} day${d===1?'':'s'})`;
 }
 
-// Export issues to CSV file
-function exportCSV() {
-  const issues = load(KEY_ISSUES);
-  if (!issues.length) { toast('No issues to export.', true); return; }
-
-  // Build CSV header row + data rows
-  const rows = [
-    ['ID','Route','Incident Time','Description','Logged At','Has Photo'],
-    ...issues.map(i => [
-      i.id,
-      i.route,
-      new Date(i.time).toLocaleString(),
-      `"${i.desc.replace(/"/g,'""')}"`,   // escape quotes in CSV
-      new Date(i.logged).toLocaleString(),
-      i.photo ? 'Yes' : 'No'
-    ])
-  ];
-  downloadCSV(rows, 'teamhub_issues.csv');
-}
-
-function exportCalendarCSV() {
-  const events = load(KEY_EVENTS);
-  if (!events.length) { toast('No events to export.', true); return; }
-  const rows = [
-    ['ID','Title','Date','Color','Note'],
-    ...events.map(e => [e.id, `"${e.title}"`, e.date, e.color||'default', `"${(e.note||'').replace(/"/g,'""')}"`])
-  ];
-  downloadCSV(rows, 'teamhub_calendar.csv');
-}
-
-function exportGrievanceCSV() {
-  const notes = load(KEY_GRIEVANCE);
-  if (!notes.length) { toast('No notes to export.', true); return; }
-  const rows = [
-    ['ID','Received At','Message'],
-    ...notes.map(n => [n.id, new Date(n.ts).toLocaleString(), `"${n.text.replace(/"/g,'""')}"`])
-  ];
-  downloadCSV(rows, 'teamhub_notes.csv');
-}
-
-// Helper: create a CSV download from a 2D array
-function downloadCSV(rows, filename) {
-  const csv  = rows.map(r => r.join(',')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv'});
+// ── Export Helpers ─────────────────────────────────────────
+function dlCSV(rows, fname) {
+  const csv  = rows.map(r=>r.join(',')).join('\n');
+  const blob = new Blob([csv],{type:'text/csv'});
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url); // clean up memory
-  toast('📊 Export downloaded!');
+  a.href=url; a.download=fname; a.click();
+  URL.revokeObjectURL(url);
+  toast('📊 Exported!');
+  logHistory('edit','system',`Exported ${fname}`);
 }
 
-function confirmReset() {
-  if (!confirm('⚠️ This will permanently delete ALL issues, events, and notes. Are you sure?')) return;
-  if (!confirm('Last chance — this cannot be undone. Confirm reset?')) return;
-  localStorage.removeItem(KEY_ISSUES);
-  localStorage.removeItem(KEY_EVENTS);
-  localStorage.removeItem(KEY_GRIEVANCE);
+function exportCSV() {
+  const issues = load(KEY_ISSUES);
+  if (!issues.length) { toast('No issues.', true); return; }
+  dlCSV([['ID','Route','Incident Time','Description','Logged At','Has Photo'],
+    ...issues.map(i=>[i.id, i.route, new Date(i.time).toLocaleString(), `"${i.desc.replace(/"/g,'""')}"`, new Date(i.logged).toLocaleString(), i.photo?'Yes':'No'])
+  ], 'teamhub_issues.csv');
+}
+
+function exportCalCSV() {
+  const ev = load(KEY_EVENTS);
+  if (!ev.length) { toast('No events.', true); return; }
+  dlCSV([['ID','Title','Date','Color','Note'], ...ev.map(e=>[e.id,`"${e.title}"`,e.date,e.color||'default',`"${(e.note||'').replace(/"/g,'""')}")`])], 'teamhub_calendar.csv');
+}
+
+function exportGrvCSV() {
+  const notes = load(KEY_GRIEVANCE);
+  if (!notes.length) { toast('No notes.', true); return; }
+  dlCSV([['ID','Received At','Message'], ...notes.map(n=>[n.id, new Date(n.ts).toLocaleString(), `"${n.text.replace(/"/g,'""')}"`])], 'teamhub_notes.csv');
+}
+
+function exportHistCSV() {
+  const h = load(KEY_HISTORY);
+  if (!h.length) { toast('No history.', true); return; }
+  dlCSV([['ID','Action','Type','Detail','Timestamp'], ...h.map(e=>[e.id, e.action, e.type, `"${e.detail.replace(/"/g,'""')}"`, new Date(e.ts).toLocaleString()])], 'teamhub_history.csv');
+}
+
+async function confirmReset() {
+  if (!confirm('Delete ALL issues, events, and notes? Cannot be undone.')) return;
+  if (!confirm('Final confirmation?')) return;
+  if (db) {
+    const delCol = async name => {
+      const s = await db.collection(name).get();
+      const b = db.batch();
+      s.docs.forEach(d=>b.delete(d.ref));
+      await b.commit();
+    };
+    try { await Promise.all(['issues','events','grievances'].map(delCol)); } catch(e) { console.warn(e); }
+  }
+  [KEY_ISSUES,KEY_EVENTS,KEY_GRIEVANCE].forEach(k=>localStorage.removeItem(k));
   localStorage.setItem(KEY_LAST_RESET, Date.now());
-  toast('🔄 All data has been reset.');
+  logHistory('del','system','Manual full data reset');
+  toast('🔄 All data reset.');
   renderAdmin();
 }
 
-// ======================================================
-// AUTO RESET LOGIC
-// ======================================================
+// ============================================================
+//  AUTO RESET
+// ============================================================
 function checkAutoReset() {
-  const now = new Date();
-  const day = now.getDate();
-
-  // Never auto-reset on the 1st of the month (per requirements)
-  if (day === 1) return;
-
-  // Reset triggers on day 2 of each month (2 days after month end)
-  if (day === 2) {
-    const lastReset = localStorage.getItem(KEY_LAST_RESET);
-    const lastResetDate = lastReset ? new Date(parseInt(lastReset)) : null;
-
-    // Only reset if we haven't already reset this month
-    if (!lastResetDate || lastResetDate.getMonth() !== now.getMonth()) {
-      localStorage.removeItem(KEY_ISSUES);
-      localStorage.removeItem(KEY_EVENTS);
-      localStorage.removeItem(KEY_GRIEVANCE);
+  const now = new Date(), day = now.getDate();
+  if (day===1) return;
+  if (day===2) {
+    const lr = localStorage.getItem(KEY_LAST_RESET);
+    const ld = lr ? new Date(parseInt(lr)) : null;
+    if (!ld || ld.getMonth()!==now.getMonth()) {
+      [KEY_ISSUES,KEY_EVENTS,KEY_GRIEVANCE].forEach(k=>localStorage.removeItem(k));
       localStorage.setItem(KEY_LAST_RESET, Date.now());
+      logHistory('del','system','Automatic monthly reset');
     }
     return;
   }
-
-  // 72-hour warning: Show notification if within 3 days of reset date
-  // Reset date = 2nd of next month
-  const resetDate    = new Date(now.getFullYear(), now.getMonth()+1, 2);
-  const hoursToReset = (resetDate - now) / (1000*60*60);
-
-  if (hoursToReset <= 72 && hoursToReset > 0 && day !== 1) {
-    const hours = Math.floor(hoursToReset);
-    showNotification(`⚠️ DATA RESET IN ${hours} HOURS — Export your data before ${resetDate.toDateString()}!`);
+  const rd = new Date(now.getFullYear(),now.getMonth()+1,2);
+  const hr = (rd-now)/(1000*60*60);
+  if (hr<=72 && hr>0) {
+    showNotification(`⚠️ DATA RESET IN ${Math.floor(hr)} HOURS — Export before ${rd.toDateString()}!`);
   }
 }
 
 function showNotification(msg) {
-  const bar = document.getElementById('notify-bar');
   document.getElementById('notify-msg').textContent = msg;
-  bar.classList.add('show');
+  document.getElementById('notify-bar').classList.add('show');
 }
 
-// ======================================================
-// PHOTO LIGHTBOX
-// ======================================================
-function openLightbox(src) {
-  document.getElementById('lightbox-img').src = src;
-  document.getElementById('lightbox').classList.add('open');
-}
-function closeLightbox() {
-  document.getElementById('lightbox').classList.remove('open');
-}
+// ============================================================
+//  LIGHTBOX & QR
+// ============================================================
+function openLightbox(src) { document.getElementById('lightbox-img').src=src; document.getElementById('lightbox').classList.add('open'); }
+function closeLightbox()   { document.getElementById('lightbox').classList.remove('open'); }
 
-// ======================================================
-// QR CODE SETUP
-// ======================================================
 function setupQR() {
   const url = window.location.href;
   document.getElementById('page-url').value = url;
-
-  // Clear old QR if re-rendering
   const qrDiv = document.getElementById('qrcode');
   qrDiv.innerHTML = '';
-
-  // Generate QR code using qrcodejs library
-  new QRCode(qrDiv, {
-    text: url,
-    width: 200,
-    height: 200,
-    colorDark: '#000000',
-    colorLight: '#ffffff',
-    correctLevel: QRCode.CorrectLevel.H   // High error correction
-  });
+  new QRCode(qrDiv,{ text:url, width:200, height:200, colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.H });
 }
 
 function copyURL() {
   const url = document.getElementById('page-url').value;
-  navigator.clipboard.writeText(url).then(() => toast('🔗 Link copied!')).catch(() => {
-    document.getElementById('page-url').select();
-    toast('Select and copy the URL above.', true);
-  });
+  navigator.clipboard.writeText(url).then(()=>toast('🔗 Copied!')).catch(()=>{ document.getElementById('page-url').select(); });
 }
 
-// ======================================================
-// INITIALIZATION
-// ======================================================
+// ============================================================
+//  INIT
+// ============================================================
 (function init() {
-  // Run auto-reset check on page load
   checkAutoReset();
-  // Render default tab
+  loadFirebaseConfig();
   renderIssues();
-  // Setup QR for initial load (so QR tab is ready)
-  setTimeout(setupQR, 500);
+  setTimeout(setupQR, 600);
 })();
 
-// Close modals when clicking outside
-document.querySelectorAll('.modal-overlay').forEach(overlay => {
-  overlay.addEventListener('click', function(e) {
-    if (e.target === this) this.classList.remove('open');
-  });
-});
+document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', e => { if(e.target===o) o.classList.remove('open'); }));
 </script>
 </body>
 </html>
